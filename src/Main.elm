@@ -2,16 +2,14 @@ module Main exposing (..)
 
 import Array exposing (Array)
 import Browser
-import Browser.Dom
-import Html exposing (..)
-import Html.Attributes exposing (..)
-import Html.Events exposing (onClick, keyCode)
+import Browser.Dom exposing (focus)
+
+import Element exposing (..)
+
+
 import List
 import Task
 import Tuple exposing (first, second)
-
-import Bootstrap.CDN as CDN
-import Bootstrap.Grid as Grid
 
 import Read exposing (..)
 
@@ -23,6 +21,15 @@ type alias Model =
   , edit : Edit
   }
 
+
+exampleSentences =
+  [ [ "– Tapaturmat sekä vakavasti sairaat potilaat, jotka eivät voi odottaa terveysaseman avautumiseen asti, hoidetaan edelleen Tays Ensiapu Acutassa, sairaanhoitopiiri tiedottaa."
+    , "– Accidents as well as seriously ill patients who cannot wait for the health station opening up, the treatment will continue to be Tays first aid Acutassa, hospital district information."
+    ]
+  , [ "Asiasta kertoi Pirkanmaan sairaanhoitopiiri keskiviikkona."
+    , "The Pirkanmaa hospital district on Wednesday."
+    ]
+  ]
 
 getSentences lines =
   List.map (\line -> List.map (\lang -> [lang]) line) lines |> Array.fromList
@@ -77,10 +84,8 @@ beginEdit model x y =
 initialModel : () -> (Model, Cmd Msg)
 initialModel _ =
   ( getInitialArticle
-      "Some article"
-      [ [ "a", "A" ]
-      , [ "b", "B" ]
-      ]
+      "Tays suosittelee myös, että työnantajat hyväksyisivät väliaikaisesti lyhyitä, 3–5 vuorokauden sairauslomia ilman lääkärintodistusta tai että sairauslomaan riittäisi sairaanhoitajan arvio."
+      exampleSentences
   , Cmd.none
   )
 
@@ -118,12 +123,12 @@ update msg model =
         )
     EditText x y ->
       ( beginEdit model x y
-      , Task.attempt (\_ -> Nop) (Browser.Dom.focus "edit")
+      , Task.attempt (\_ -> Nop) (focus "edit")
       )
     Nop -> ( model, Cmd.none)
     Commit -> ( beginEdit model -1 -1, Cmd.none)
 
-view : Model -> Html Msg
+--view : Model -> Element Msg
 view model =
   let
     isEditing = \x y -> (x, y) == (model.edit.x, model.edit.y)
@@ -136,11 +141,9 @@ view model =
       }
     rows = newArticeHtml events isEditing
   in
-    div []
-        [ h1 [] [ text model.article.name ]
-        , CDN.stylesheet
-        , newArticeHtml events isEditing sentences
-        ]
+    Element.layout
+      []
+      <| newArticeHtml events isEditing model.article.name sentences
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
