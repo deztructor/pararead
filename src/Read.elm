@@ -1,5 +1,4 @@
 module Read exposing (Languages, newArticeHtml, Sentence, SentenceEvents, IsEditing)
-import Html.Events exposing (keyCode)
 --import Html.Attributes exposing (..)
 import Debug
 
@@ -12,32 +11,15 @@ import Element.Region as Region exposing (heading)
 
 import Html.Attributes exposing (id)
 import Html as H
-import Json.Decode as Json
 
 import List
+
+import Widgets exposing (..)
 
 type alias Sentence = List String
 type alias Languages = List Sentence
 type alias IsEditing = (Int -> Int -> Bool)
 
-
-okColor =
-    Element.rgb255 238 238 238
-
-
--- onKeyConsume : Int -> msg -> Attribute msg
-onKeyConsume consumedCode msg =
-    let
-      isEnter code =
-        if code == consumedCode then
-          Json.succeed (msg, True)
-        else
-          Json.fail "Skip"
-    in
-        htmlAttribute
-        <| Html.Events.stopPropagationOn "keydown" (Json.andThen isEnter keyCode)
-
-onEnterConsume = onKeyConsume 13
 
 getReadingHtml edit s =
   Element.paragraph
@@ -48,32 +30,36 @@ getReadingHtml edit s =
   [ Element.text s
   ]
 
+
+getEditor input commit s =
+  Input.multiline
+    [ focusedOnLoad
+    , width fill
+    , onEnterConsume commit
+    , htmlAttribute <| id "edit"
+    , padding 10
+    ]
+  { onChange = input
+  , text = s
+  , placeholder = Nothing
+  , label = labelHidden ""
+  , spellcheck = False
+  }
+
+
 getEditingHtml input commit s =
-  column
-    [ width fill
-    , spacing 10
-    ]
-    [
-     Input.multiline
-       [ focusedOnLoad
-       , width fill
-       , onEnterConsume commit
-       , htmlAttribute <| id "edit"
-       , padding 10
-       ]
-       { onChange = input
-       , text = s
-       , placeholder = Nothing
-       , label = labelHidden ""
-       , spellcheck = False
-       }
-    , button
-      [ Background.color okColor
-      ]
-      { onPress = Just commit
-      , label = Element.text "Commit"
-      }
-    ]
+  let
+    editButtons = row [ width fill
+                      , spacing 10 ]
+                  [ styledButton okColor commit "Commit"
+                  , styledButton okColor commit "Cancel"
+                  ]
+  in
+    column [ width fill
+           , spacing 10
+           ] [ getEditor input commit s
+             , editButtons
+             ]
 
 type alias SentenceEvents msg =
   { input : (String -> msg)
