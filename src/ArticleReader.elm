@@ -1,7 +1,8 @@
-module Read exposing (Languages, newArticeHtml, Sentence, SentenceEvents, IsEditing)
+module ArticleReader exposing (newArticeHtml, SentenceEvents)
 --import Html.Attributes exposing (..)
 import Debug
 
+import Array exposing (Array)
 import Element exposing (..)
 import Element.Background as Background exposing (..)
 import Element.Input as Input exposing (..)
@@ -16,10 +17,19 @@ import List
 
 import Widgets exposing (..)
 
-type alias Sentence = List String
-type alias Languages = List Sentence
-type alias IsEditing = (Int -> Int -> Bool)
+import Article exposing
+  ( Article
+  , Cell
+  , Languages
+  , Sentence
+  )
 
+
+type alias SentenceEvents msg =
+  { input : Cell -> String -> msg
+  , edit : Cell  -> msg
+  , commit : msg
+  }
 
 getReadingHtml edit s =
   Element.paragraph
@@ -30,7 +40,7 @@ getReadingHtml edit s =
   [ Element.text s
   ]
 
-
+getEditor : (String -> msg) -> msg -> String -> Element msg
 getEditor input commit s =
   Input.multiline
     [ focusedOnLoad
@@ -61,29 +71,24 @@ getEditingHtml input commit s =
              , editButtons
              ]
 
-type alias SentenceEvents msg =
-  { input : (String -> msg)
-  , edit: (Int -> Int  -> msg)
-  , commit : msg
-  }
-
-getCol : SentenceEvents msg -> IsEditing -> Int -> Int -> Sentence -> Element msg
-getCol events is_editing x y sentence =
-  let is_edit = is_editing x y
-      get_html = if is_edit then
-                   getEditingHtml events.input events.commit
-                 else
-                   getReadingHtml (events.edit x y)
-      text = case sentence of
-               s :: _ -> s
-               [] -> ""
+getCol : SentenceEvents msg -> Cell -> Int -> Int -> Sentence -> Element msg
+getCol events edit x y sentence =
+  let
+    cur_cell = { x = x, y = y}
+    get_html = if cur_cell == edit then
+                 getEditingHtml (events.input cur_cell) events.commit
+               else
+                 getReadingHtml (events.edit cur_cell)
+    text = case sentence of
+             s :: _ -> s
+             [] -> ""
   in
     get_html text
 
-getRow : SentenceEvents msg -> IsEditing -> Int -> List Sentence -> Element msg
-getRow events is_editing x items =
+getRow : SentenceEvents msg -> Cell -> Int -> List Sentence -> Element msg
+getRow events edit x items =
   let
-    cells = List.indexedMap (getCol events is_editing x) items
+    cells = List.indexedMap (getCol events edit x) items
   in
     Element.row [ width (fill |> minimum 300) ] cells
 
@@ -100,11 +105,13 @@ headingHtml name =
         (Element.text name)
     ]
 
-newArticeHtml : SentenceEvents msg -> IsEditing -> String -> List (List Sentence) -> Element msg
-newArticeHtml events isCellEdit name sentences =
+newArticeHtml : SentenceEvents msg -> Article -> Element msg
+newArticeHtml events { name, edit, sentences } =
   let
-    getRowByX = getRow events isCellEdit
-    rows = sentences |> List.indexedMap getRowByX
+    getRowByX = getRow events edit
+    rows
+      = Array.toList
+        <| Array.indexedMap getRowByX sentences
     title = headingHtml name
   in
     Element.column

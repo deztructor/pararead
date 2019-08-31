@@ -11,20 +11,19 @@ import Task
 import Tuple exposing (first, second)
 import Url exposing (Url)
 
-import Read exposing (..)
+import ArticleReader exposing (..)
 import Article exposing
   ( Article
   , beginEdit
   , toSentences
   , updateText
-  , Edit
+  , Cell
   , Sentences
   )
 import Route exposing (Route)
 
 type alias Model =
   { article : Article
-  , edit : Edit
   , key : Nav.Key
   }
 
@@ -43,10 +42,10 @@ getInitialArticle key name sentences =
   beginEdit { article =
                 { name = name
                 , sentences = toSentences sentences
+                , edit = { x = 0, y = 1 }
                 }
-            , edit = { x = 0, y = 1 }
             , key = key
-            } 0 1
+            } { x = 0, y = 1}
 
 
 initialModel : () -> Url -> Nav.Key -> (Model, Cmd Msg)
@@ -59,8 +58,8 @@ initialModel _ _ key =
   )
 
 type Msg
-  = TextChanged Int Int String
-  | EditText Int Int
+  = TextChanged Cell String
+  | EditText Cell
   | Nop
   | Commit
   | ClickedLink UrlRequest
@@ -107,27 +106,25 @@ update msg model =
       updateUrl urlRequest model
     ChangedUrl url ->
       gotoPage (Route.fromUrl url) model
-    TextChanged x y s ->
-      ( { model | article = updateText model.article x y s }
+    TextChanged edit s ->
+      ( { model | article = updateText model.article edit s }
       , Cmd.none
       )
-    EditText x y ->
-      ( beginEdit model x y
+    EditText edit ->
+      ( beginEdit model edit
       , Task.attempt (\_ -> Nop) (focus "edit")
       )
     Nop -> ( model, Cmd.none)
-    Commit -> ( beginEdit model -1 -1, Cmd.none)
+    Commit -> ( beginEdit model { x = -1, y = -1}, Cmd.none)
 
-viewArticle { edit, article } = -- TODO
+viewArticle { article } = -- TODO
   let
-    isEditing = \x y -> (x, y) == (edit.x, edit.y)
-    sentences = Array.toList article.sentences
     events =
-      { input = TextChanged edit.x edit.y
+      { input = TextChanged
       , edit = EditText
       , commit = Commit
       }
-    readHtml = newArticeHtml events isEditing article.name sentences
+    readHtml = newArticeHtml events article
   in
     { title = article.name
     , body = [ Element.layout [] readHtml]
