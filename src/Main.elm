@@ -1,24 +1,31 @@
 module Main exposing (..)
 
 import Array exposing (Array)
-import Browser
+
+import Browser exposing (UrlRequest(..))
 import Browser.Dom exposing (focus)
-
+import Browser.Navigation as Nav
 import Element exposing (..)
-
-
 import List
 import Task
 import Tuple exposing (first, second)
+import Url exposing (Url)
 
 import Read exposing (..)
+import Article exposing
+  ( Article
+  , beginEdit
+  , toSentences
+  , updateText
+  , Edit
+  , Sentences
+  )
+import Route exposing (Route)
 
-type alias Sentences = Array Languages
-type alias Article = { name : String, sentences: Sentences }
-type alias Edit = { x : Int, y : Int }
 type alias Model =
   { article : Article
   , edit : Edit
+  , key : Nav.Key
   }
 
 
@@ -31,59 +38,21 @@ exampleSentences =
     ]
   ]
 
-getSentences lines =
-  List.map (\line -> List.map (\lang -> [lang]) line) lines |> Array.fromList
-
-getInitialArticle : String -> List (List String) -> Model
-getInitialArticle name sentences =
+getInitialArticle : Nav.Key -> String -> List (List String) -> Model
+getInitialArticle key name sentences =
   beginEdit { article =
                 { name = name
-                , sentences = getSentences sentences
+                , sentences = toSentences sentences
                 }
             , edit = { x = 0, y = 1 }
+            , key = key
             } 0 1
 
-beginEditSentence : List String -> List String
-beginEditSentence col =
-    case col of
-      x :: xs -> if Just x /= (List.head xs) then x :: x :: xs else col
-      _ -> [""]
 
-beginEditCol : Languages -> Int -> Maybe Languages
-beginEditCol row y =
-  let
-    arr = Array.fromList row
-    maybe_col = Array.get y arr
-  in
-    case maybe_col of
-      Just col -> Array.set y (beginEditSentence col) arr |> Array.toList |> Just
-      Nothing -> Nothing
-
-beginEditRow : Article -> Int -> Int -> Maybe Article
-beginEditRow article x y =
-  let maybe_row = Array.get x article.sentences
-  in
-    case maybe_row of
-      Just row ->
-        let maybe_edited_row = beginEditCol row y
-        in
-          case maybe_edited_row of
-            Just edited_row -> Just { article | sentences = Array.set x edited_row article.sentences }
-            Nothing -> Nothing
-      Nothing -> Nothing
-
-beginEdit : Model -> Int -> Int -> Model
-beginEdit model x y =
-  let
-    maybe_article = beginEditRow model.article x y
-  in
-    case maybe_article of
-      Just article -> { model | article = article, edit = { x = x, y = y } }
-      Nothing -> { model | edit = { x = -1, y = -1 } }
-
-initialModel : () -> (Model, Cmd Msg)
-initialModel _ =
+initialModel : () -> Url -> Nav.Key -> (Model, Cmd Msg)
+initialModel _ _ key =
   ( getInitialArticle
+      key
       "Tays suosittelee myös, että työnantajat hyväksyisivät väliaikaisesti lyhyitä, 3–5 vuorokauden sairauslomia ilman lääkärintodistusta tai että sairauslomaan riittäisi sairaanhoitajan arvio."
       exampleSentences
   , Cmd.none
@@ -94,33 +63,54 @@ type Msg
   | EditText Int Int
   | Nop
   | Commit
+  | ClickedLink UrlRequest
+  | ChangedUrl Url
 
-updateHead : String -> Sentence -> Sentence
-updateHead value sentence =
-  case sentence of
-    _ :: xs -> value :: xs
-    [] -> [value]
+switchToArticle model article =
+  (model, Cmd.none)
 
-rowReplace : Int -> String -> Languages -> Languages
-rowReplace i to items =
-  List.indexedMap (\j original -> if i == j then (updateHead to original) else original) items
+switchToCompose model =
+  (model, Cmd.none)
 
-updatedArticleSentences article x y s =
-  let maybe_row = Array.get x article.sentences
+gotoPage : Maybe Route -> Model -> (Model, Cmd Msg)
+gotoPage route model =
+  let
+    root = (model, Cmd.none)
+    -- root = ( { model | page = Route.Articles }, Cmd.none)
   in
-    case maybe_row of
-      Just row -> Array.set x (rowReplace y s row) article.sentences
-      Nothing -> article.sentences
+    case route of
+      Nothing ->
+        root
+      Just Route.Articles ->
+        root
+      Just (Route.Read article) ->
+        switchToArticle model article
+      Just Route.Compose ->
+        switchToCompose model
+
+updateUrl : UrlRequest -> Model -> (Model, Cmd Msg)
+updateUrl urlRequest model =
+  case urlRequest of
+    Internal url ->
+      ( model
+      , Nav.pushUrl model.key (Url.toString url)
+      )
+    External url ->
+      ( model
+      , Nav.load url
+      )
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
+    ClickedLink urlRequest ->
+      updateUrl urlRequest model
+    ChangedUrl url ->
+      gotoPage (Route.fromUrl url) model
     TextChanged x y s ->
-      let article = model.article
-      in
-        ( { model | article = { name = article.name, sentences = updatedArticleSentences article x y s } }
-        , Cmd.none
-        )
+      ( { model | article = updateText model.article x y s }
+      , Cmd.none
+      )
     EditText x y ->
       ( beginEdit model x y
       , Task.attempt (\_ -> Nop) (focus "edit")
@@ -128,31 +118,39 @@ update msg model =
     Nop -> ( model, Cmd.none)
     Commit -> ( beginEdit model -1 -1, Cmd.none)
 
---view : Model -> Element Msg
-view model =
+viewArticle { edit, article } = -- TODO
   let
-    isEditing = \x y -> (x, y) == (model.edit.x, model.edit.y)
-    onTextInput = TextChanged model.edit.x model.edit.y
-    sentences = Array.toList model.article.sentences
+    isEditing = \x y -> (x, y) == (edit.x, edit.y)
+    sentences = Array.toList article.sentences
     events =
-      { input = onTextInput
+      { input = TextChanged edit.x edit.y
       , edit = EditText
       , commit = Commit
       }
-    rows = newArticeHtml events isEditing
+    readHtml = newArticeHtml events isEditing article.name sentences
   in
-    Element.layout
-      []
-      <| newArticeHtml events isEditing model.article.name sentences
+    { title = article.name
+    , body = [ Element.layout [] readHtml]
+    }
+
+view : Model -> Browser.Document Msg
+view model =
+  viewArticle model
+  -- case model.page of
+  --   Articles -> viewArticles model
+  --   Read Id id -> viewArticle model id
+  --   Compose -> viewCompose model
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
   Sub.none
 
 main =
-  Browser.element
+  Browser.application
     { init = initialModel
     , view = view
     , update = update
     , subscriptions = subscriptions
+    , onUrlRequest = ClickedLink
+    , onUrlChange = ChangedUrl
     }
