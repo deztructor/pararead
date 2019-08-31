@@ -22,7 +22,8 @@ onKeyConsume consumedCode msg =
           Json.fail "Skip"
     in
         htmlAttribute
-        <| Html.Events.stopPropagationOn "keydown" (Json.andThen isEnter keyCode)
+        <| Html.Events.stopPropagationOn "keydown"
+        <| Json.andThen isEnter keyCode
 
 onEnterConsume = onKeyConsume 13
 
