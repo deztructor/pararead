@@ -1,0 +1,8 @@
+{
+    "git-dependencies": {
+        "direct": {
+            "file:///home/dez/src/github/autoexpand": "3.0.1"
+        },
+        "indirect": {}
+    }
+}
